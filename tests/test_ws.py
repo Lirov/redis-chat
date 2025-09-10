@@ -38,7 +38,7 @@ def test_websocket_message_sending(client):
         # Send a message
         message = {"text": "Hello, world!"}
         websocket.send_text(json.dumps(message))
-        
+
         # The message should be processed without error
         # Note: In a real test with Redis, we'd receive the message back
         # But with mocked Redis, we just verify no exceptions are raised
@@ -49,7 +49,7 @@ def test_websocket_plain_text_message(client):
     with client.websocket_connect("/ws/testroom?username=alice") as websocket:
         # Send plain text (not JSON)
         websocket.send_text("Hello, world!")
-        
+
         # The message should be processed without error
         # Plain text gets wrapped in a ChatIn object
 
@@ -59,6 +59,6 @@ def test_websocket_invalid_json_message(client):
     with client.websocket_connect("/ws/testroom?username=alice") as websocket:
         # Send invalid JSON
         websocket.send_text('{"invalid": json}')
-        
+
         # The message should be processed without error
         # Invalid JSON gets treated as plain text

@@ -33,7 +33,7 @@ def event_loop():
 def mock_redis():
     """Mock Redis connection for testing."""
     mock_redis = AsyncMock()
-    
+
     # Mock common Redis operations
     mock_redis.lrange.return_value = []
     mock_redis.smembers.return_value = set()
@@ -44,7 +44,7 @@ def mock_redis():
     mock_redis.lpush.return_value = 1
     mock_redis.ltrim.return_value = True
     mock_redis.publish.return_value = 1
-    
+
     # Mock pubsub
     mock_pubsub = AsyncMock()
     mock_pubsub.subscribe.return_value = None
@@ -52,7 +52,7 @@ def mock_redis():
     mock_pubsub.close.return_value = None
     mock_pubsub.listen.return_value = []
     mock_redis.pubsub.return_value = mock_pubsub
-    
+
     return mock_redis
 
 
@@ -61,7 +61,7 @@ def client(mock_redis, monkeypatch):
     """Create a test client with mocked Redis."""
     # Patch the redis import in the main module
     monkeypatch.setattr("app.main.redis", mock_redis)
-    
+
     with TestClient(app) as test_client:
         yield test_client
 
@@ -71,7 +71,7 @@ async def async_client(mock_redis, monkeypatch):
     """Create an async test client with mocked Redis."""
     # Patch the redis import in the main module
     monkeypatch.setattr("app.main.redis", mock_redis)
-    
+
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 
