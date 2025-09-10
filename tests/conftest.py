@@ -47,11 +47,19 @@ def mock_redis():
 
     # Mock pubsub
     mock_pubsub = AsyncMock()
-    mock_pubsub.subscribe.return_value = None
-    mock_pubsub.unsubscribe.return_value = None
-    mock_pubsub.close.return_value = None
-    mock_pubsub.listen.return_value = []
-    mock_redis.pubsub.return_value = mock_pubsub
+    mock_pubsub.subscribe = AsyncMock(return_value=None)
+    mock_pubsub.unsubscribe = AsyncMock(return_value=None)
+    mock_pubsub.close = AsyncMock(return_value=None)
+
+    async def _empty_async_iter():
+        if False:
+            yield None
+
+    # listen() should return an async iterator
+    mock_pubsub.listen = AsyncMock(return_value=_empty_async_iter())
+
+    # redis.pubsub() should be a regular function returning the pubsub object
+    mock_redis.pubsub = lambda: mock_pubsub
 
     return mock_redis
 
