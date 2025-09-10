@@ -5,24 +5,24 @@ import pytest
 
 def test_websocket_connection_rejected_no_username(client):
     """Test that WebSocket connection is rejected without username."""
-    with client.websocket_connect("/ws/testroom"):
-        # This should raise an exception since no username is provided
-        pytest.raises(Exception)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws/testroom"):
+            pass  # This should raise an exception since no username is provided
 
 
 def test_websocket_connection_rejected_invalid_username(client):
     """Test that WebSocket connection is rejected with invalid username."""
-    with client.websocket_connect("/ws/testroom?username="):
-        # This should raise an exception since username is empty
-        pytest.raises(Exception)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws/testroom?username="):
+            pass  # This should raise an exception since username is empty
 
 
 def test_websocket_connection_rejected_long_username(client):
     """Test that WebSocket connection is rejected with username too long."""
     long_username = "a" * 33  # 33 characters, limit is 32
-    with client.websocket_connect(f"/ws/testroom?username={long_username}"):
-        # This should raise an exception since username is too long
-        pytest.raises(Exception)
+    with pytest.raises(Exception):
+        with client.websocket_connect(f"/ws/testroom?username={long_username}"):
+            pass  # This should raise an exception since username is too long
 
 
 def test_websocket_connection_accepted(client):

@@ -80,6 +80,6 @@ async def async_client(mock_redis, monkeypatch):
 def sample_history():
     """Sample chat history for testing."""
     return [
-        '{"type": "message", "room": "test", "username": "alice", "text": "hello", "ts": 1234567890}',
         '{"type": "message", "room": "test", "username": "bob", "text": "hi there", "ts": 1234567891}',
+        '{"type": "message", "room": "test", "username": "alice", "text": "hello", "ts": 1234567890}',
     ]
