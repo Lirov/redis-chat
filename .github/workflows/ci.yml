@@ -91,11 +91,8 @@ jobs:
     
     - name: Test Docker image with Redis
       run: |
-        # Start Redis container for the app to connect to
-        docker run -d --name redis-for-app -p 6379:6379 redis:7
-        sleep 5
-        
-        # Run the app container with Redis URL pointing to the Redis container
+        # Use the existing Redis service (already running on localhost:6379)
+        # Run the app container with Redis URL pointing to the Redis service
         docker run --rm -d --name redis-chat-test -p 8000:8000 --network host -e REDIS_URL=redis://localhost:6379/0 redis-chat:latest
         sleep 10
         
@@ -103,4 +100,4 @@ jobs:
         curl -f http://localhost:8000/rooms || exit 1
         
         # Cleanup
-        docker stop redis-chat-test redis-for-app
+        docker stop redis-chat-test
