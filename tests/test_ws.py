@@ -1,18 +1,18 @@
-import pytest
 import json
-from fastapi.testclient import TestClient
+
+import pytest
 
 
 def test_websocket_connection_rejected_no_username(client):
     """Test that WebSocket connection is rejected without username."""
-    with client.websocket_connect("/ws/testroom") as websocket:
+    with client.websocket_connect("/ws/testroom"):
         # This should raise an exception since no username is provided
         pytest.raises(Exception)
 
 
 def test_websocket_connection_rejected_invalid_username(client):
     """Test that WebSocket connection is rejected with invalid username."""
-    with client.websocket_connect("/ws/testroom?username=") as websocket:
+    with client.websocket_connect("/ws/testroom?username="):
         # This should raise an exception since username is empty
         pytest.raises(Exception)
 
@@ -20,7 +20,7 @@ def test_websocket_connection_rejected_invalid_username(client):
 def test_websocket_connection_rejected_long_username(client):
     """Test that WebSocket connection is rejected with username too long."""
     long_username = "a" * 33  # 33 characters, limit is 32
-    with client.websocket_connect(f"/ws/testroom?username={long_username}") as websocket:
+    with client.websocket_connect(f"/ws/testroom?username={long_username}"):
         # This should raise an exception since username is too long
         pytest.raises(Exception)
 

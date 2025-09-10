@@ -1,13 +1,12 @@
 import asyncio
-import pytest
-import pytest_asyncio
-from fastapi.testclient import TestClient
-from httpx import AsyncClient
-import redis.asyncio as redis
-from unittest.mock import AsyncMock, MagicMock
 import os
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent

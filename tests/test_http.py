@@ -1,5 +1,3 @@
-import pytest
-import json
 
 
 def test_get_rooms(client):
