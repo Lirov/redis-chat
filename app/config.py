@@ -1,4 +1,5 @@
-from pydantic import BaseSettings, AnyUrl
+from pydantic import AnyUrl
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     REDIS_URL: AnyUrl = "redis://localhost:6379/0"
