@@ -17,7 +17,8 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/1"  # Use different DB for tes
 os.environ["APP_HOST"] = "127.0.0.1"
 os.environ["APP_PORT"] = "8001"  # Different port for tests
 
-from app.main import app
+# Import after setting up environment
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture(scope="session")
