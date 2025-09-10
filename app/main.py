@@ -3,9 +3,8 @@ import json
 import contextlib
 from typing import List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from redis.asyncio.client import PubSub
 
 from .config import settings

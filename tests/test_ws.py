@@ -1,4 +1,5 @@
-import json, asyncio
+import json
+import asyncio
 import websockets
 
 async def two_party_chat(room="pytest2"):
