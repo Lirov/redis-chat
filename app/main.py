@@ -23,6 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def _maybe_bump_history_ttl(room: str):
+    if settings.HISTORY_TTL_SECONDS > 0:
+        await redis.expire(history_key(room), settings.HISTORY_TTL_SECONDS)
 
 def room_channel(room: str) -> str:
     return f"room:{room}"
@@ -250,6 +253,7 @@ async def websocket_endpoint(ws: WebSocket, room: str):
 
             await redis.lpush(history_key(room), payload)
             await redis.ltrim(history_key(room), 0, settings.CHAT_HISTORY_LIMIT - 1)
+            await _maybe_bump_history_ttl(room)
     except WebSocketDisconnect:
         pass
     finally:
