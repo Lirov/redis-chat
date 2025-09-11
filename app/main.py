@@ -22,6 +22,7 @@ from redis.asyncio.client import PubSub
 from .config import settings
 from .redis_conn import redis
 from .schemas import ChatOut, HistoryItem
+from .rate_limit import allow_message
 from pydantic import BaseModel
 
 app = FastAPI(title="Redis Real-Time Chat")
@@ -344,6 +345,24 @@ async def websocket_endpoint(ws: WebSocket, room: str):
                 continue
             out = ChatOut(room=current_room, username=username, text=text)
             payload = out.model_dump_json()
+
+            if msg_type == "message":
+                # rate limit
+                ok, rem = await allow_message(username, current_room)
+                if not ok:
+                    # inform only the sender; do not persist
+                    await ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "rate_limit",
+                                "room": current_room,
+                                "username": username,
+                                "msg": "Too many messages, slow down.",
+                                "ts": int(time.time()),
+                            }
+                        )
+                    )
+                    continue
 
             await redis.publish(room_channel(current_room), payload)
             await redis.lpush(history_key(current_room), payload)
