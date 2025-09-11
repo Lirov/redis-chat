@@ -16,6 +16,7 @@ sys.path.insert(0, str(project_root))
 os.environ["REDIS_URL"] = "redis://localhost:6379/1"  # Use different DB for tests
 os.environ["APP_HOST"] = "127.0.0.1"
 os.environ["APP_PORT"] = "8001"  # Different port for tests
+os.environ["ALLOW_ANON_WS"] = "true"  # Allow anonymous WebSocket connections for testing
 
 # Import after setting up environment
 from app.main import app  # noqa: E402

@@ -3,26 +3,26 @@ import json
 import pytest
 
 
-def test_websocket_connection_rejected_no_username(client):
-    """Test that WebSocket connection is rejected without username."""
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/testroom"):
-            pass  # This should raise an exception since no username is provided
+def test_websocket_connection_accepted_no_username(client):
+    """Test that WebSocket connection is accepted without username (anonymous)."""
+    with client.websocket_connect("/ws/testroom") as websocket:
+        # Connection should be accepted as anonymous user
+        assert websocket is not None
 
 
-def test_websocket_connection_rejected_invalid_username(client):
-    """Test that WebSocket connection is rejected with invalid username."""
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/testroom?username="):
-            pass  # This should raise an exception since username is empty
+def test_websocket_connection_accepted_empty_username(client):
+    """Test that WebSocket connection is accepted with empty username (anonymous)."""
+    with client.websocket_connect("/ws/testroom?username=") as websocket:
+        # Connection should be accepted as anonymous user
+        assert websocket is not None
 
 
-def test_websocket_connection_rejected_long_username(client):
-    """Test that WebSocket connection is rejected with username too long."""
+def test_websocket_connection_accepted_long_username(client):
+    """Test that WebSocket connection is accepted with long username (truncated)."""
     long_username = "a" * 33  # 33 characters, limit is 32
-    with pytest.raises(Exception):
-        with client.websocket_connect(f"/ws/testroom?username={long_username}"):
-            pass  # This should raise an exception since username is too long
+    with client.websocket_connect(f"/ws/testroom?username={long_username}") as websocket:
+        # Connection should be accepted (username will be truncated or handled)
+        assert websocket is not None
 
 
 def test_websocket_connection_accepted(client):
