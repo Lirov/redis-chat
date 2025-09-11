@@ -10,5 +10,11 @@ services:
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
       - CHAT_HISTORY_LIMIT=50
+      - HISTORY_TTL_SECONDS=604800
+      - JWT_SECRET=local-dev-change-me
+      - JWT_EXPIRES_MINUTES=60
+      - ALLOW_ANON_WS=false
+      - RATE_LIMIT_TOKENS_PER_SEC=10
+      - RATE_LIMIT_BURST=20
     ports: ["8000:8000"]
     depends_on: [redis]

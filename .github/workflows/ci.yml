@@ -2,14 +2,14 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       redis:
         image: redis:7
@@ -22,52 +22,59 @@ jobs:
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Lint with ruff
-      run: |
-        ruff check .
-        ruff format --check .
-    
-    - name: Test with pytest
-      run: |
-        pytest --timeout=30 -v
-      env:
-        REDIS_URL: redis://localhost:6379/1
-        APP_HOST: 127.0.0.1
-        APP_PORT: 8001
-    
-    - name: Test with real Redis (integration tests)
-      run: |
-        pytest --timeout=30 -v -m integration
-      env:
-        REDIS_URL: redis://localhost:6379/1
-        APP_HOST: 127.0.0.1
-        APP_PORT: 8001
-      if: false  # Disabled for now, can be enabled when integration tests are added
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Test with pytest
+        run: |
+          pytest --timeout=30 -v
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          APP_HOST: 0.0.0.0
+          APP_PORT: 8000
+          CHAT_HISTORY_LIMIT: 50
+          HISTORY_TTL_SECONDS: 0
+          JWT_SECRET: test-secret
+          JWT_EXPIRES_MINUTES: 5
+          ALLOW_ANON_WS: true # CI can use anon sockets for simpler tests
+          RATE_LIMIT_TOKENS_PER_SEC: 100
+          RATE_LIMIT_BURST: 200
+
+      - name: Test with real Redis (integration tests)
+        run: |
+          pytest --timeout=30 -v -m integration
+        env:
+          REDIS_URL: redis://localhost:6379/1
+          APP_HOST: 127.0.0.1
+          APP_PORT: 8001
+        if: false # Disabled for now, can be enabled when integration tests are added
 
   build:
     runs-on: ubuntu-latest
     needs: test
-    
+
     services:
       redis:
         image: redis:7
@@ -78,26 +85,26 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Build Docker image
-      run: |
-        docker build -t redis-chat:latest .
-    
-    - name: Test Docker image with Redis
-      run: |
-        # Use the existing Redis service (already running on localhost:6379)
-        # Run the app container with Redis URL pointing to the Redis service
-        docker run --rm -d --name redis-chat-test -p 8000:8000 --network host -e REDIS_URL=redis://localhost:6379/0 redis-chat:latest
-        sleep 10
-        
-        # Test the endpoint
-        curl -f http://localhost:8000/rooms || exit 1
-        
-        # Cleanup
-        docker stop redis-chat-test
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t redis-chat:latest .
+
+      - name: Test Docker image with Redis
+        run: |
+          # Use the existing Redis service (already running on localhost:6379)
+          # Run the app container with Redis URL pointing to the Redis service
+          docker run --rm -d --name redis-chat-test -p 8000:8000 --network host -e REDIS_URL=redis://localhost:6379/0 redis-chat:latest
+          sleep 10
+
+          # Test the endpoint
+          curl -f http://localhost:8000/rooms || exit 1
+
+          # Cleanup
+          docker stop redis-chat-test
