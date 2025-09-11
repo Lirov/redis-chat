@@ -4,6 +4,10 @@ import contextlib
 from typing import List
 from fastapi.responses import HTMLResponse
 import time
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from fastapi.responses import Response
+from .metrics import WS_CONNECTIONS, MSGS_PUBLISHED, RATE_LIMIT_BLOCKS, PUBLISH_LATENCY
+
 
 from .security import create_access_token, decode_token
 from .users import create_user, verify_user
@@ -26,6 +30,8 @@ from .rate_limit import allow_message
 from pydantic import BaseModel
 
 app = FastAPI(title="Redis Real-Time Chat")
+
+RATE_LIMIT_BLOCKS.inc()
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +64,24 @@ async def auth_login(b: Login):
     if not verify_user(b.username, b.password):
         raise HTTPException(401, "invalid creds")
     return {"access_token": create_access_token(b.username), "token_type": "bearer"}
+
+
+@app.get("/healthz")
+async def healthz():
+    pong = await redis.ping()
+    return {"ok": bool(pong)}
+
+
+@app.get("/readyz")
+async def readyz():
+    # minimal: ensure Redis responds; you can extend with a pub/sub test
+    pong = await redis.ping()
+    return {"ready": bool(pong)}
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # -- Helpers --
@@ -273,6 +297,7 @@ async def websocket_endpoint(ws: WebSocket, room: str):
         await ws.close(code=1008)
         return
     await ws.accept()
+    WS_CONNECTIONS.inc()
 
     current_room = room
     await _join_room(username, current_room)
@@ -345,6 +370,7 @@ async def websocket_endpoint(ws: WebSocket, room: str):
                 continue
             out = ChatOut(room=current_room, username=username, text=text)
             payload = out.model_dump_json()
+            t0 = time.perf_counter()
 
             if msg_type == "message":
                 # rate limit
@@ -370,6 +396,8 @@ async def websocket_endpoint(ws: WebSocket, room: str):
                 history_key(current_room), 0, settings.CHAT_HISTORY_LIMIT - 1
             )
             await _maybe_bump_history_ttl(current_room)
+            PUBLISH_LATENCY.observe(time.perf_counter() - t0)
+            MSGS_PUBLISHED.inc()
 
     except WebSocketDisconnect:
         pass
@@ -377,6 +405,7 @@ async def websocket_endpoint(ws: WebSocket, room: str):
         with contextlib.suppress(Exception):
             await _leave_room(username, current_room)
         with contextlib.suppress(Exception):
+            WS_CONNECTIONS.dec()
             await pubsub.unsubscribe(room_channel(current_room))
             await pubsub.close()
         reader_task.cancel()
