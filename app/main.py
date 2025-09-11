@@ -5,13 +5,24 @@ from typing import List
 from fastapi.responses import HTMLResponse
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from .security import create_access_token, decode_token
+from .users import create_user, verify_user
+
+
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    Query,
+    HTTPException,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio.client import PubSub
 
 from .config import settings
 from .redis_conn import redis
 from .schemas import ChatOut, HistoryItem
+from pydantic import BaseModel
 
 app = FastAPI(title="Redis Real-Time Chat")
 
@@ -22,6 +33,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class Register(BaseModel):
+    username: str
+    password: str
+
+
+class Login(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/register")
+async def auth_register(b: Register):
+    if not create_user(b.username, b.password):
+        raise HTTPException(400, "username exists")
+    return {"ok": True}
+
+
+@app.post("/auth/login")
+async def auth_login(b: Login):
+    if not verify_user(b.username, b.password):
+        raise HTTPException(401, "invalid creds")
+    return {"access_token": create_access_token(b.username), "token_type": "bearer"}
 
 
 # -- Helpers --
@@ -223,9 +258,18 @@ async def get_rooms():
 @app.websocket("/ws/{room}")
 async def websocket_endpoint(ws: WebSocket, room: str):
     # simple query param auth: ?username=alice
-    username = ws.query_params.get("username")
-    if not username or len(username) > 32:
-        await ws.close(code=1008)  # policy violation
+    token = ws.query_params.get("token")
+    username = None
+    if token:
+        try:
+            username = decode_token(token)
+        except ValueError:
+            await ws.close(code=1008)  # policy violation
+            return
+    elif settings.ALLOW_ANON_WS:
+        username = ws.query_params.get("username") or "anon"
+    else:
+        await ws.close(code=1008)
         return
     await ws.accept()
 
