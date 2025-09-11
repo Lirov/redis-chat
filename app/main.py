@@ -11,7 +11,7 @@ from redis.asyncio.client import PubSub
 
 from .config import settings
 from .redis_conn import redis
-from .schemas import ChatIn, ChatOut, HistoryItem
+from .schemas import ChatOut, HistoryItem
 
 app = FastAPI(title="Redis Real-Time Chat")
 
@@ -23,9 +23,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# -- Helpers --
+async def _join_room(username: str, room: str):
+    await redis.sadd(ROOMS_SET, room)
+    await redis.sadd(members_key(room), username)
+    # broadcast join (not persisted in history)
+    await redis.publish(
+        room_channel(room),
+        json.dumps(
+            {
+                "type": "system",
+                "room": room,
+                "username": username,
+                "event": "join",
+                "ts": int(time.time()),
+            }
+        ),
+    )
+
+
+async def _leave_room(username: str, room: str):
+    await redis.srem(members_key(room), username)
+    if not await redis.scard(members_key(room)):
+        await redis.srem(ROOMS_SET, room)
+        await redis.delete(members_key(room))
+    await redis.publish(
+        room_channel(room),
+        json.dumps(
+            {
+                "type": "system",
+                "room": room,
+                "username": username,
+                "event": "leave",
+                "ts": int(time.time()),
+            }
+        ),
+    )
+
+
 async def _maybe_bump_history_ttl(room: str):
     if settings.HISTORY_TTL_SECONDS > 0:
         await redis.expire(history_key(room), settings.HISTORY_TTL_SECONDS)
+
 
 def room_channel(room: str) -> str:
     return f"room:{room}"
@@ -40,6 +80,7 @@ def members_key(room: str) -> str:
 
 
 ROOMS_SET = "rooms:set"
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -163,6 +204,7 @@ async def get_history(room: str, limit: int = Query(20, ge=1, le=200)):
 
 # --- HTTP: list rooms ---
 
+
 @app.get("/presence/{room}")
 async def presence(room: str):
     members = await redis.smembers(members_key(room))
@@ -181,31 +223,19 @@ async def get_rooms():
 @app.websocket("/ws/{room}")
 async def websocket_endpoint(ws: WebSocket, room: str):
     # simple query param auth: ?username=alice
-
     username = ws.query_params.get("username")
     if not username or len(username) > 32:
         await ws.close(code=1008)  # policy violation
         return
     await ws.accept()
 
-    # Mark presence & room
-
-    await redis.sadd(ROOMS_SET, room)
-    await redis.sadd(members_key(room), username)
-
-    await redis.publish(
-    room_channel(room),
-    json.dumps({
-        "type": "system", "room": room, "username": username,
-        "event": "join", "ts": int(time.time())
-    })
-)
+    current_room = room
+    await _join_room(username, current_room)
 
     pubsub: PubSub = redis.pubsub()
-    await pubsub.subscribe(room_channel(room))
+    await pubsub.subscribe(room_channel(current_room))
 
     # Background task to fan-in messages from Redis to this WS
-
     async def reader():
         try:
             async for msg in pubsub.listen():
@@ -215,64 +245,76 @@ async def websocket_endpoint(ws: WebSocket, room: str):
                 await ws.send_text(payload)
         except Exception:
             # ws closed or redis closed; reader exits
-
             pass
 
     reader_task = asyncio.create_task(reader())
 
     try:
         # send last history on connect (optional UX)
-
         hist = await redis.lrange(
-            history_key(room), 0, min(20, settings.CHAT_HISTORY_LIMIT) - 1
+            history_key(current_room), 0, min(20, settings.CHAT_HISTORY_LIMIT) - 1
         )
         for h in reversed(hist):
             await ws.send_text(h)
-        # main loop: receive from WS, publish to Redis + persist
 
+        # main loop: receive from WS, publish to Redis + persist
         while True:
             raw = await ws.receive_text()
+            # normalize payload
             try:
-                incoming = (
-                    ChatIn.model_validate_json(raw)
-                    if raw.strip().startswith("{")
-                    else ChatIn(text=raw)
-                )
+                obj = json.loads(raw)
             except Exception:
-                # normalize bad payloads to plain text
+                obj = {"type": "message", "text": raw}
 
-                incoming = ChatIn(text=raw)
-            out = ChatOut(room=room, username=username, text=incoming.text)
+            msg_type = obj.get("type", "message")
+
+            if msg_type == "switch":
+                new_room = obj.get("room", "").strip()
+                if not new_room:
+                    continue  # ignore bad payload
+                if new_room == current_room:
+                    continue
+
+                # leave old room
+                await _leave_room(username, current_room)
+                await pubsub.unsubscribe(room_channel(current_room))
+
+                # join new room
+                current_room = new_room
+                await _join_room(username, current_room)
+                await pubsub.subscribe(room_channel(current_room))
+
+                # send recent history for the new room
+                hist = await redis.lrange(
+                    history_key(current_room),
+                    0,
+                    min(20, settings.CHAT_HISTORY_LIMIT) - 1,
+                )
+                for h in reversed(hist):
+                    await ws.send_text(h)
+                continue
+
+            # default path: message
+            text = obj.get("text", "")
+            if not text:
+                continue
+            out = ChatOut(room=current_room, username=username, text=text)
             payload = out.model_dump_json()
 
-            # 1) publish to channel
+            await redis.publish(room_channel(current_room), payload)
+            await redis.lpush(history_key(current_room), payload)
+            await redis.ltrim(
+                history_key(current_room), 0, settings.CHAT_HISTORY_LIMIT - 1
+            )
+            await _maybe_bump_history_ttl(current_room)
 
-            await redis.publish(room_channel(room), payload)
-
-            # 2) write to history (LPUSH newest first) + trim
-
-            await redis.lpush(history_key(room), payload)
-            await redis.ltrim(history_key(room), 0, settings.CHAT_HISTORY_LIMIT - 1)
-            await _maybe_bump_history_ttl(room)
     except WebSocketDisconnect:
         pass
     finally:
         with contextlib.suppress(Exception):
-            await redis.srem(members_key(room), username)
-            # optional: cleanup empty rooms
-
-            if not await redis.scard(members_key(room)):
-                await redis.srem(ROOMS_SET, room)
-                await redis.delete(members_key(room))
+            await _leave_room(username, current_room)
         with contextlib.suppress(Exception):
-            await redis.publish(
-                room_channel(room),
-                json.dumps({
-                    "type": "system", "room": room, "username": username,
-                    "event": "leave", "ts": int(time.time())
-                })
-            )
-            await pubsub.unsubscribe(room_channel(room))
+            await pubsub.unsubscribe(room_channel(current_room))
             await pubsub.close()
         reader_task.cancel()
         with contextlib.suppress(Exception):
