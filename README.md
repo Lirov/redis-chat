@@ -123,6 +123,6 @@ redis-chat/
 
 ### License
 
-MIT (or your choice). Update this section if you adopt a different license.
+MIT.
 
 
